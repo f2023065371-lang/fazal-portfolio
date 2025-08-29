@@ -1,15 +1,11 @@
 'use client';
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import Image from 'next/image';
 
 /**
- * app/page.tsx — Full portfolio page (TypeScript-safe)
- * - Hero updated: "Software Engineering Student | AI‑Assisted Developer"
- * - Profile picture from /public/profile.jpg
- * - CV button uses /FAZALRAHEEM_CV.pdf
- * - Admin modal with Invoice/Quotation PDF (jspdf) + robust try/catch
- * - Minimal self-tests to sanity check UI
+ * app/page.tsx — TypeScript-safe single page
+ * Fixes TS errors like: "Property 'error' does not exist on type 'never'" by
+ * adding explicit types to state and component props.
  */
 
 // ===== Types =====
@@ -22,7 +18,7 @@ type UserRecord = {
 
 type Users = Record<string, UserRecord>;
 
-// ===== Small UI bits =====
+// ===== Reusable UI bits =====
 function SectionTitle({ kicker = 'Section', title, desc }: { kicker?: string; title: string; desc?: string }) {
   return (
     <div className="text-center mb-12">
@@ -54,9 +50,29 @@ function TimelineItem({ title, org, time, points = [] }: { title: string; org: s
   );
 }
 
-function ProjectCard({ title, tag, desc, bullets = [], cta, href }: { title: string; tag: string; desc: string; bullets?: string[]; cta?: string; href?: string }) {
+function ProjectCard({
+  title,
+  tag,
+  desc,
+  bullets = [],
+  cta,
+  href
+}: {
+  title: string;
+  tag: string;
+  desc: string;
+  bullets?: string[];
+  cta?: string;
+  href?: string;
+}) {
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.4 }} className="card h-full flex flex-col">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.4 }}
+      className="card h-full flex flex-col"
+    >
       <div className="text-xs uppercase tracking-widest text-secondary/80">{tag}</div>
       <h3 className="text-xl font-bold mt-1">{title}</h3>
       <p className="text-white/70 mt-2">{desc}</p>
@@ -102,84 +118,79 @@ function AdminModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   }
 
   async function genPDF() {
-    try {
-      const mod = await import('jspdf');
-      const doc = new mod.jsPDF({ unit: 'pt', format: 'a4' });
+    const mod = await import('jspdf');
+    const doc = new mod.jsPDF({ unit: 'pt', format: 'a4' });
 
-      // Watermark
-      doc.setFontSize(60);
-      doc.setTextColor(230);
-      // @ts-expect-error angle is allowed at runtime
-      doc.text('FAZAL RAHEEM', 70, 400, { angle: 30 });
+    // Watermark
+    doc.setFontSize(60);
+    doc.setTextColor(230);
+    // jsPDF supports rotation via the options object
+    doc.text('FAZAL RAHEEM', 70, 400, { angle: 30 } as any);
 
-      // Header
-      doc.setTextColor(30);
+    // Header
+    doc.setTextColor(30);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(22);
+    doc.text(docType, 40, 60);
+
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    ['Fazal Raheem — Software Engineer', 'Lahore, Pakistan', 'Phone: +92 302 1421472', 'Email: fazalraheem508@gmail.com'].forEach((t, i) => doc.text(t, 40, 90 + i * 16));
+
+    if (user) {
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(22);
-      doc.text(docType, 40, 60);
-
-      doc.setFontSize(12);
+      doc.text('Issued By:', 380, 60);
       doc.setFont('helvetica', 'normal');
-      ['Fazal Raheem — Software Engineering Student', 'AI‑Assisted Developer', 'Lahore, Pakistan', 'Email: fazalraheem508@gmail.com'].forEach((t, i) => doc.text(t, 40, 90 + i * 16));
-
-      if (user) {
-        doc.setFont('helvetica', 'bold');
-        doc.text('Issued By:', 380, 60);
-        doc.setFont('helvetica', 'normal');
-        doc.text(user.contact.name, 380, 78);
-        doc.text(user.contact.phone, 380, 94);
-        doc.text(user.contact.email, 380, 110);
-      }
-
-      // Bill To
-      doc.setFont('helvetica', 'bold');
-      doc.text('Bill To:', 40, 160);
-      doc.setFont('helvetica', 'normal');
-      [to.name, to.phone, to.email, to.address].filter(Boolean).forEach((t, i) => doc.text(String(t), 40, 178 + i * 16));
-
-      // Items
-      const startY = 240;
-      doc.setFont('helvetica', 'bold');
-      doc.text('Description', 40, startY);
-      doc.text('Qty', 360, startY);
-      doc.text('Price', 420, startY);
-      doc.text('Amount', 500, startY);
-
-      doc.setFont('helvetica', 'normal');
-      let y = startY + 18;
-      items.forEach((it, idx) => {
-        const amount = (Number(it.qty) || 0) * (Number(it.price) || 0);
-        doc.text(String(it.desc || `Item ${idx + 1}`), 40, y);
-        doc.text(String(it.qty || 0), 360, y);
-        doc.text(String(it.price || 0), 420, y);
-        doc.text(String(amount.toFixed(2)), 500, y);
-        y += 18;
-      });
-
-      // Totals
-      y += 10;
-      doc.setFont('helvetica', 'bold');
-      doc.text('Subtotal:', 420, y);
-      doc.text(String(subtotal.toFixed(2)), 500, y);
-      doc.setFont('helvetica', 'normal');
-      y += 16;
-      doc.text('Tax:', 420, y);
-      doc.text(String(tax.toFixed(2)), 500, y);
-      doc.setFont('helvetica', 'bold');
-      y += 16;
-      doc.text('Total:', 420, y);
-      doc.text(String(total.toFixed(2)), 500, y);
-
-      // Footer
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.text('Thank you!', 40, 790);
-
-      doc.save(`${docType.replace(/\s+/g, '_')}_${Date.now()}.pdf`);
-    } catch (err) {
-      console.error('genPDF error:', err);
-      alert("jspdf is not installed. Run: npm i jspdf");
+      doc.text(user.contact.name, 380, 78);
+      doc.text(user.contact.phone, 380, 94);
+      doc.text(user.contact.email, 380, 110);
     }
+
+    // Bill To
+    doc.setFont('helvetica', 'bold');
+    doc.text('Bill To:', 40, 160);
+    doc.setFont('helvetica', 'normal');
+    [to.name, to.phone, to.email, to.address].filter(Boolean).forEach((t, i) => doc.text(String(t), 40, 178 + i * 16));
+
+    // Items
+    const startY = 240;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Description', 40, startY);
+    doc.text('Qty', 360, startY);
+    doc.text('Price', 420, startY);
+    doc.text('Amount', 500, startY);
+
+    doc.setFont('helvetica', 'normal');
+    let y = startY + 18;
+    items.forEach((it, idx) => {
+      const amount = (Number(it.qty) || 0) * (Number(it.price) || 0);
+      doc.text(String(it.desc || `Item ${idx + 1}`), 40, y);
+      doc.text(String(it.qty || 0), 360, y);
+      doc.text(String(it.price || 0), 420, y);
+      doc.text(String(amount.toFixed(2)), 500, y);
+      y += 18;
+    });
+
+    // Totals
+    y += 10;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Subtotal:', 420, y);
+    doc.text(String(subtotal.toFixed(2)), 500, y);
+    doc.setFont('helvetica', 'normal');
+    y += 16;
+    doc.text('Tax:', 420, y);
+    doc.text(String(tax.toFixed(2)), 500, y);
+    doc.setFont('helvetica', 'bold');
+    y += 16;
+    doc.text('Total:', 420, y);
+    doc.text(String(total.toFixed(2)), 500, y);
+
+    // Footer
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text('Thank you for your business!', 40, 790);
+
+    doc.save(`${docType.replace(/\s+/g, '_')}_${Date.now()}.pdf`);
   }
 
   return (
@@ -280,10 +291,18 @@ function Navbar({ onOpenAdmin }: { onOpenAdmin: () => void }) {
           <span className="font-bold text-lg">Fazal Raheem</span>
         </div>
         <div className="flex items-center gap-3">
-          <a href="#projects" className="btn-outline">Projects</a>
-          <a href="#contact" className="btn-outline">Contact</a>
-          <button className="btn-outline" onClick={onOpenAdmin}>Admin</button>
-          <a href="/FAZALRAHEEM_CV.pdf" className="btn-primary" download>Download CV</a>
+          <a href="#projects" className="btn-outline">
+            Projects
+          </a>
+          <a href="#contact" className="btn-outline">
+            Contact
+          </a>
+          <button className="btn-outline" onClick={onOpenAdmin}>
+            Admin
+          </button>
+          <a href="/FAZALRAHEEM_CV.pdf" className="btn-primary" download>
+            Download CV
+          </a>
         </div>
       </div>
     </motion.nav>
@@ -319,7 +338,7 @@ export default function PortfolioApp() {
   const [testResults, setTestResults] = useState<TestResult[]>([]);
 
   useEffect(() => {
-    // Minimal global styles
+    // Inject minimal global styles so preview looks decent
     const style = document.createElement('style');
     style.innerHTML = `
       :root { --bg:#080c1a; --card:#0e1530; }
@@ -344,45 +363,54 @@ export default function PortfolioApp() {
       {/* HERO */}
       <section className="section pt-24">
         <div className="container grid md:grid-cols-2 gap-10 items-center">
-          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7 }} className="card flex items-center justify-center">
-            <Image src="/profile.jpg" alt="Profile Picture" width={250} height={250} className="rounded-full border-4 border-white/20 shadow-lg object-cover" />
-          </motion.div>
           <div>
-            <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="text-3xl md:text-5xl font-black leading-tight">
+            <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="text-4xl md:text-6xl font-black leading-tight">
               Hi, I’m <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">Fazal</span>
               <br />
-              Software Engineering Student | AI‑Assisted Developer
+              Software Engineer & AI Developer
             </motion.h1>
             <p className="text-white/70 mt-5 max-w-xl">
-              I design logic and solutions myself, and use AI tools (ChatGPT, Claude, Gemini) to assist with coding. This helps me build full‑stack web apps, Android apps, and Arduino projects efficiently.
+              Enthusiastic and adaptable Software Engineering student with hands-on experience in AI-assisted development. I build full-stack web apps, Android apps, and Arduino projects.
             </p>
             <div className="mt-7 flex gap-3">
-              <a href="#projects" className="btn-primary">View Projects</a>
-              <a href="/FAZALRAHEEM_CV.pdf" className="btn-outline" download>Download CV</a>
+              <a href="#projects" className="btn-primary">
+                View Projects
+              </a>
+              <a href="/FAZALRAHEEM_CV.pdf" className="btn-outline" download>
+                Download CV
+              </a>
             </div>
             <div className="mt-6 text-white/60 text-sm">
               Lahore, Pakistan • +92 302 1421472 • <a className="underline" href="mailto:fazalraheem508@gmail.com">fazalraheem508@gmail.com</a>
             </div>
           </div>
+          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7 }} className="card h-80 md:h-full flex items-center justify-center">
+            <div className="w-full h-full rounded-xl bg-gradient-to-br from-white/5 to-white/0 border border-white/10 flex items-center justify-center">
+              <div className="text-center">
+                <div className="text-7xl">⚡</div>
+                <p className="mt-4 text-white/70">AI-assisted Dev • Full-Stack • Arduino</p>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
       {/* ABOUT */}
       <section className="section">
         <div className="container">
-          <SectionTitle kicker="About" title="Who I Am" desc="I’m a student who builds logic and uses AI tools to accelerate coding and learning." />
+          <SectionTitle kicker="About" title="Who I Am" desc="Passionate about learning, experimenting, and creating innovative solutions through technology." />
           <div className="grid md:grid-cols-2 gap-6">
             <div className="card">
               <h4 className="font-bold text-lg">Summary</h4>
               <p className="text-white/80 mt-2">
-                I leverage AI tools for coding and productivity. I’ve built Android apps using Kotlin, created full‑stack web apps, and integrated hardware with software for automation using Arduino.
+                I leverage AI tools for coding and productivity. I’ve built Android apps using Kotlin, created full-stack web apps, and integrated hardware with software for automation using Arduino.
               </p>
             </div>
             <div className="card">
               <h4 className="font-bold text-lg">Highlights</h4>
               <ul className="list-disc ml-5 mt-2 space-y-1 text-white/80">
-                <li>AI‑assisted development (ChatGPT, Claude, Gemini)</li>
-                <li>Full‑stack web apps (Node.js/Express + MongoDB)</li>
+                <li>AI-assisted development (ChatGPT, Claude, Gemini)</li>
+                <li>Full-stack web apps (Node.js/Express + MongoDB)</li>
                 <li>Android (Kotlin) & Flutter (web)</li>
                 <li>Arduino projects (gesture car, RFID lock, robots)</li>
                 <li>Basic video editing for YouTube automation (CapCut)</li>
@@ -416,11 +444,16 @@ export default function PortfolioApp() {
         <div className="container">
           <SectionTitle kicker="Experience" title="What I’ve Done" />
           <div className="card">
-            <TimelineItem title="Video Editing — Freelance/Private Client" org="Lahore, Pakistan" time="Aug 2024 – Jan 2025" points={[
-              'Edited and produced YouTube automation videos in the skincare niche using CapCut.',
-              'Handled trimming, transitions, captions, music, and visual effects for engagement.',
-              'Worked remotely and delivered on time to match branding and audience.'
-            ]} />
+            <TimelineItem
+              title="Video Editing — Freelance/Private Client"
+              org="Lahore, Pakistan"
+              time="Aug 2024 – Jan 2025"
+              points={[
+                'Edited and produced YouTube automation videos in the skincare niche using CapCut.',
+                'Handled trimming, transitions, captions, music, and visual effects for engagement.',
+                'Worked remotely and delivered on time to match branding and audience.'
+              ]}
+            />
           </div>
         </div>
       </section>
@@ -454,9 +487,9 @@ export default function PortfolioApp() {
         <div className="container">
           <SectionTitle kicker="Projects" title="Things I’ve Built" />
           <div className="grid md:grid-cols-2 gap-6">
-            <ProjectCard title="Clothing E‑Commerce Website (Full‑Stack, Ongoing)" tag="Web / Full‑Stack" desc="Developing with AI‑assisted tools. Modern responsive frontend; backend (Node/Express + MongoDB) in progress." bullets={['Product pages', 'Interactive UI', 'Responsive design']} />
+            <ProjectCard title="Clothing E-Commerce Website (Full-Stack, Ongoing)" tag="Web / Full-Stack" desc="Developing with AI-assisted tools. Modern responsive frontend; backend (Node/Express + MongoDB) in progress." bullets={['Product pages', 'Interactive UI', 'Responsive design']} />
             <ProjectCard title="Status Saver App" tag="Android (Kotlin)" desc="Simple Android app to save WhatsApp statuses (images & videos) built in Android Studio with AI guidance." bullets={['Media access', 'Gallery view', 'Save/share']} />
-            <ProjectCard title="Fusion X Gaming Store" tag="E‑Commerce (In Progress)" desc="Store for consoles & accessories (Xbox, PlayStation). Designing UI/UX and integrating backend with AI tools." bullets={['Product catalog', 'Cart flow', 'Modern UI']} />
+            <ProjectCard title="Fusion X Gaming Store" tag="E-Commerce (In Progress)" desc="Store for consoles & accessories (Xbox, PlayStation). Designing UI/UX and integrating backend with AI tools." bullets={['Product catalog', 'Cart flow', 'Modern UI']} />
             <ProjectCard title="Bill Challan Generator" tag="Flutter Web App" desc="Generates professional bill challans with PDF export and responsive UI." bullets={['Form inputs', 'PDF export', 'Responsive layout']} />
           </div>
 
@@ -465,7 +498,7 @@ export default function PortfolioApp() {
             <ul className="list-disc ml-5 mt-2 text-white/80 space-y-1">
               <li>Hand Gesture Car – controlled with gesture sensors</li>
               <li>Robot Fight Car – competitive robotic car</li>
-              <li>Bluetooth Car – wireless‑controlled vehicle</li>
+              <li>Bluetooth Car – wireless-controlled vehicle</li>
               <li>RFID Door Lock System – secure access with RFID</li>
               <li>Plus multiple projects with sensors, automation, and robotics</li>
             </ul>
@@ -483,23 +516,30 @@ export default function PortfolioApp() {
                 <input className="w-full bg-white/5 border border-white/10 rounded-xl p-3" placeholder="Your Name" required />
                 <input className="w-full bg-white/5 border border-white/10 rounded-xl p-3" placeholder="Email" type="email" required />
                 <textarea className="w-full bg-white/5 border border-white/10 rounded-xl p-3 h-32" placeholder="Message" required />
-                <button className="btn-primary" type="submit">Send Message</button>
+                <button className="btn-primary" type="submit">
+                  Send Message
+                </button>
               </form>
             </div>
             <div className="card">
               <h4 className="font-semibold text-lg">Direct</h4>
-              <p className="text-white/80 mt-2">Email: <a className="underline" href="mailto:fazalraheem508@gmail.com">fazalraheem508@gmail.com</a></p>
+              <p className="text-white/80 mt-2">
+                Email: <a className="underline" href="mailto:fazalraheem508@gmail.com">fazalraheem508@gmail.com</a>
+              </p>
               <p className="text-white/80">Phone: +92 302 1421472</p>
               <p className="text-white/60 mt-2">I’m open to .NET / Web / Mobile roles and freelance work. I can also build free MVPs for small businesses to get started.</p>
-              <div className="mt-4 flex gap-3 flex-wrap">
+              <div className="mt-4 flex gap-3">
                 <a className="btn-outline" href="https://www.linkedin.com/in/fazal-raheem-8865a329a/" target="_blank" rel="noreferrer">
                   LinkedIn
                 </a>
                 <a className="btn-outline" href="https://wa.me/923021421472" target="_blank" rel="noreferrer">
                   WhatsApp
                 </a>
-                <a className="btn-outline" href="https://www.instagram.com/fazal.raheem" target="_blank" rel="noreferrer">
+                <a className="btn-outline" href="https://instagram.com" target="_blank" rel="noreferrer">
                   Instagram
+                </a>
+                <a className="btn-outline" href="https://github.com" target="_blank" rel="noreferrer">
+                  GitHub
                 </a>
               </div>
             </div>
@@ -511,7 +551,10 @@ export default function PortfolioApp() {
               <div className="font-semibold">Self-tests</div>
               <ul className="list-disc ml-5">
                 {testResults.map((t, i) => (
-                  <li key={i}>{t.pass ? '✅' : '❌'} {t.name}{t.error ? ` — ${t.error}` : ''}</li>
+                  <li key={i}>
+                    {t.pass ? '✅' : '❌'} {t.name}
+                    {t.error ? ` — ${t.error}` : ''}
+                  </li>
                 ))}
               </ul>
             </div>
